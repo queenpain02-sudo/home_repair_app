@@ -1,0 +1,44 @@
+// Merge these matches/functions into your EXISTING firestore.rules file.
+// Do not replace all existing rules with this snippet, because the app already
+// uses other collections (users, services, service_requests, payments, etc.).
+
+function signedIn() {
+  return request.auth != null;
+}
+
+function isAdmin() {
+  return signedIn()
+    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+}
+
+match /chats/{chatId} {
+  // Each customer can create/read/update only their own chat document.
+  // Admin users can view and reply to all customer chats.
+  allow create: if signedIn() && (
+    (chatId == request.auth.uid && request.resource.data.customerId == request.auth.uid)
+    || isAdmin()
+  );
+  allow read: if signedIn() && (chatId == request.auth.uid || isAdmin());
+  allow update: if signedIn() && (
+    (chatId == request.auth.uid && resource.data.customerId == request.auth.uid
+      && request.resource.data.customerId == request.auth.uid)
+    || isAdmin()
+  );
+  allow delete: if isAdmin();
+
+  match /messages/{messageId} {
+    allow read: if signedIn() && (chatId == request.auth.uid || isAdmin());
+
+    allow create: if signedIn()
+      && request.resource.data.senderId == request.auth.uid
+      && (
+        (chatId == request.auth.uid && request.resource.data.senderRole == 'customer')
+        || (isAdmin() && request.resource.data.senderRole == 'admin')
+      );
+
+    // Admin marks customer messages as read. Other message edits/deletes are blocked.
+    allow update: if isAdmin()
+      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readByAdmin']);
+    allow delete: if isAdmin();
+  }
+}

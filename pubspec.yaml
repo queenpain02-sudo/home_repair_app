@@ -1,0 +1,52 @@
+name: home_repair_app
+description: Home Repair Service Platform for Customers, Technicians and Admins.
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.9.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # Supabase
+  supabase_flutter: ^2.10.3
+
+  # Environment variables
+  flutter_dotenv: ^6.0.0
+
+  # State management
+  provider: ^6.1.5
+
+  # Routing
+  go_router: ^16.2.4
+  firebase_core: ^4.15.0
+  firebase_auth: ^6.7.0
+  cloud_firestore: ^6.10.0
+  firebase_storage: ^13.6.0
+  image_picker: ^1.2.1
+  url_launcher: ^6.3.0
+  
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: "^0.13.1"
+
+flutter_launcher_icons:
+  image_path: "assets/images/logo.jpg" # 👈 သင်အသုံးပြုမည့် Logo ပုံနေရာ
+  android: true
+  ios: true
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - .env
+    - assets/images/logo.jpg
+    - assets/icons/
