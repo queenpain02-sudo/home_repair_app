@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../models/service_category_model.dart';
 import '../../services/service_category_service.dart';
@@ -28,15 +30,13 @@ class _ServiceCategoryManagementScreenState
       text: category?.icon ?? 'category',
     );
 
-    final imageUrlController = TextEditingController(
-      text: category?.imageUrl ?? '',
-    );
-
     final sortOrderController = TextEditingController(
       text: category?.sortOrder.toString() ?? '0',
     );
 
     bool isActive = category?.isActive ?? true;
+    String imageUrl = category?.imageUrl ?? '';
+    File? selectedImageFile; // 🌟 ဖုန်းမှ ရွေးချယ်ထားသော ပုံဖိုင်
 
     await showDialog(
       context: context,
@@ -45,6 +45,22 @@ class _ServiceCategoryManagementScreenState
 
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            // 🖼️ Gallery မှ ပုံရွေးချယ်သည့် Function
+            Future<void> pickImage() async {
+              final picker = ImagePicker();
+              final pickedFile = await picker.pickImage(
+                source: ImageSource.gallery,
+                imageQuality: 70,
+              );
+
+              if (pickedFile != null) {
+                setDialogState(() {
+                  selectedImageFile = File(pickedFile.path);
+                  imageUrl = pickedFile.path; // သို့မဟုတ် Storage တင်မည့် path
+                });
+              }
+            }
+
             Future<void> save() async {
               if (!formKey.currentState!.validate()) {
                 return;
@@ -58,7 +74,6 @@ class _ServiceCategoryManagementScreenState
                 final name = nameController.text.trim();
                 final description = descriptionController.text.trim();
                 final icon = iconController.text.trim();
-                final imageUrl = imageUrlController.text.trim();
 
                 final sortOrder =
                     int.tryParse(sortOrderController.text.trim()) ?? 0;
@@ -132,6 +147,39 @@ class _ServiceCategoryManagementScreenState
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // 🌟 ပုံပေါ်လာရန် နှင့် နှိပ်၍ ပုံပြောင်းရန် UI
+                        GestureDetector(
+                          onTap: saving ? null : pickImage,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              CircleAvatar(
+                                radius: 40,
+                                backgroundColor: Colors.grey.shade200,
+                                backgroundImage: selectedImageFile != null
+                                    ? FileImage(selectedImageFile!)
+                                    : (imageUrl.isNotEmpty && !imageUrl.startsWith('http') == false
+                                        ? NetworkImage(imageUrl) as ImageProvider
+                                        : null),
+                                child: (selectedImageFile == null &&
+                                        imageUrl.isEmpty)
+                                    ? const Icon(
+                                        Icons.add_a_photo,
+                                        size: 30,
+                                        color: Colors.grey,
+                                      )
+                                    : null,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Tap to pick category image',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 16),
+
                         TextFormField(
                           controller: nameController,
                           decoration: const InputDecoration(
@@ -170,18 +218,6 @@ class _ServiceCategoryManagementScreenState
                             labelText: 'Icon Name',
                             hintText: 'Example: electrical_services',
                             prefixIcon: Icon(Icons.insert_emoticon_outlined),
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        TextFormField(
-                          controller: imageUrlController,
-                          decoration: const InputDecoration(
-                            labelText: 'Image URL',
-                            hintText: 'Optional',
-                            prefixIcon: Icon(Icons.image_outlined),
                             border: OutlineInputBorder(),
                           ),
                         ),
@@ -261,7 +297,6 @@ class _ServiceCategoryManagementScreenState
     nameController.dispose();
     descriptionController.dispose();
     iconController.dispose();
-    imageUrlController.dispose();
     sortOrderController.dispose();
   }
 
@@ -355,39 +390,41 @@ class _ServiceCategoryManagementScreenState
     BuildContext context,
     ServiceCategoryModel category,
   ) {
-    final iconName = category.icon.toLowerCase();
+    // 🌟 ပုံရှိလျှင် ပုံပြသပေးပြီး၊ မရှိလျှင် icon ကို ပြသမည်
+    if (category.imageUrl.isNotEmpty) {
+      return CircleAvatar(
+        radius: 28,
+        backgroundImage: category.imageUrl.startsWith('http')
+            ? NetworkImage(category.imageUrl) as ImageProvider
+            : FileImage(File(category.imageUrl)),
+      );
+    }
 
+    final iconName = category.icon.toLowerCase();
     IconData icon;
 
     switch (iconName) {
       case 'electrical_services':
         icon = Icons.electrical_services;
         break;
-
       case 'plumbing':
         icon = Icons.plumbing;
         break;
-
       case 'ac_unit':
         icon = Icons.ac_unit;
         break;
-
       case 'home_repair_service':
         icon = Icons.home_repair_service;
         break;
-
       case 'format_paint':
         icon = Icons.format_paint;
         break;
-
       case 'construction':
         icon = Icons.construction;
         break;
-
       case 'devices':
         icon = Icons.devices;
         break;
-
       case 'category':
       default:
         icon = Icons.category_outlined;
@@ -466,7 +503,7 @@ class _ServiceCategoryManagementScreenState
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     Text(
                       'Tap "Add Category" to create your first service category.',
                       textAlign: TextAlign.center,

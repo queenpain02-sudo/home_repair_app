@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -145,7 +146,10 @@ class _ServiceRequestDetailScreenState
 
   Future<void> _approveQuotation() async {
     try {
-      await _firestore.collection('service_requests').doc(widget.requestId).update({
+      await _firestore
+          .collection('service_requests')
+          .doc(widget.requestId)
+          .update({
         'status': 'customer_approved',
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -157,7 +161,10 @@ class _ServiceRequestDetailScreenState
 
   Future<void> _rejectQuotation() async {
     try {
-      await _firestore.collection('service_requests').doc(widget.requestId).update({
+      await _firestore
+          .collection('service_requests')
+          .doc(widget.requestId)
+          .update({
         'status': 'customer_rejected',
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -167,22 +174,24 @@ class _ServiceRequestDetailScreenState
     }
   }
 
+  // ✅ Router လမ်းကြောင်းလွဲမှု မဖြစ်စေရန် Promocode ပါသော PaymentScreen သို့ တိုက်ရိုက်ပို့ပေးခြင်း
  void _openPayment(Map<String, dynamic> data) {
-  final quotationAmount = _toDouble(data['quotationAmount']);
-  final amount = quotationAmount > 0
-      ? quotationAmount
-      : _toDouble(data['price']);
+    final quotationAmount = _toDouble(data['quotationAmount']);
+    final amount = quotationAmount > 0 ? quotationAmount : _toDouble(data['price']);
 
-  context.push(
-    '/customer/payment',
-    extra: {
-      'requestId': widget.requestId,
-      'serviceName': data['serviceName']?.toString() ?? 'Repair Service',
-      'totalAmount': amount,
-    },
-  );
-}
-  void _openInvoice() {
+    // GoRouter ဖြင့် PaymentScreen သို့ extra ပို့ဆောင်ခြင်း
+    context.push(
+      '/customer/payment',
+      extra: {
+        'requestId': widget.requestId,
+        'materialCost': _toDouble(data['partsCost'] ?? data['materialCost']),
+        'serviceCost': _toDouble(data['serviceCost'] ?? data['servicecost'] ?? data['serviceFee']),
+        'laborCost': _toDouble(data['laborCost'] ?? data['labor_cost'] ?? amount),
+      },
+    );
+  }
+
+void _openInvoice() {
     context.push('/customer/invoice', extra: {'requestId': widget.requestId});
   }
 
@@ -199,7 +208,6 @@ class _ServiceRequestDetailScreenState
     );
   }
 
-  // 🛠️ Widget? အဖြစ် ပြောင်းလဲထားခြင်း (မရှိလျှင် null ကို ပြန်ပေးမည်)
   Widget? _buildActionButton(Map<String, dynamic> data) {
     final status = data['status']?.toString().toLowerCase() ?? 'pending';
     final hasReviewed = data['isReviewed'] == true;
@@ -262,7 +270,10 @@ class _ServiceRequestDetailScreenState
       );
     }
 
-    if (status == 'customer_approved' || status == 'approved' || status == 'payment_pending' || status.contains('approve')) {
+    if (status == 'customer_approved' ||
+        status == 'approved' ||
+        status == 'payment_pending' ||
+        status.contains('approve')) {
       return _actionButton(
         label: 'Make Payment',
         icon: Icons.payment_rounded,
@@ -314,7 +325,7 @@ class _ServiceRequestDetailScreenState
       );
     }
 
-    return null; // 👈 ဘာမှမရှိလျှင် null ပြန်မည်
+    return null;
   }
 
   Widget _actionButton({
@@ -374,10 +385,7 @@ class _ServiceRequestDetailScreenState
     }
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: _firestore
-          .collection('users')
-          .doc(technicianId)
-          .snapshots(),
+      stream: _firestore.collection('users').doc(technicianId).snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _sectionCard(
@@ -400,16 +408,18 @@ class _ServiceRequestDetailScreenState
         final name = displayName.trim().isNotEmpty
             ? displayName
             : storedName.trim().isNotEmpty
-            ? storedName
-            : 'Technician';
+                ? storedName
+                : 'Technician';
 
-        final phone = data['phone']?.toString() ?? data['phoneNumber']?.toString() ?? '';
+        final phone =
+            data['phone']?.toString() ?? data['phoneNumber']?.toString() ?? '';
         final specialization = data['specialization']?.toString() ?? '';
         final email = data['email']?.toString() ?? '';
-        
-        final photoUrl = data['profileImage']?.toString() ?? 
-            data['profileImageUrl']?.toString() ?? 
-            data['imageUrl']?.toString() ?? '';
+
+        final photoUrl = data['profileImage']?.toString() ??
+            data['profileImageUrl']?.toString() ??
+            data['imageUrl']?.toString() ??
+            '';
 
         return _sectionCard(
           title: 'Assigned Technician',
@@ -714,18 +724,16 @@ class _ServiceRequestDetailScreenState
           final technicianId = data['technicianId']?.toString() ?? '';
           final address = data['address']?.toString() ?? '';
 
-          final issueDescription =
-              data['note']?.toString() ??
+          final issueDescription = data['note']?.toString() ??
               data['issueDescription']?.toString() ??
+              data['customerDescription']?.toString() ??
               '';
 
           final quotationAmount = _toDouble(data['quotationAmount']);
 
-          final amount = quotationAmount > 0
-              ? quotationAmount
-              : _toDouble(data['price']);
+          final amount =
+              quotationAmount > 0 ? quotationAmount : _toDouble(data['price']);
 
-          // 🛠️ Action Widget ကို စစ်ဆေးခြင်း (null မဟုတ်မှသာ Next Step Card ပေါ်မည်)
           final actionWidget = _buildActionButton(data);
 
           return RefreshIndicator(
@@ -736,112 +744,103 @@ class _ServiceRequestDetailScreenState
                   .doc(widget.requestId)
                   .get(const GetOptions(source: Source.serverAndCache));
             },
-            child: ListView(
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(18, 18, 18, 30),
-              children: [
-                _buildRequestHeader(
-                  serviceName: serviceName,
-                  categoryName: categoryName,
-                  status: status,
-                ),
-
-                const SizedBox(height: 16),
-
-                _buildTechnicianProfileCard(technicianId),
-
-                if (actionWidget != null) ...[
+              child: Column(
+                children: [
+                  _buildRequestHeader(
+                    serviceName: serviceName,
+                    categoryName: categoryName,
+                    status: status,
+                  ),
+                  const SizedBox(height: 16),
+                  _buildTechnicianProfileCard(technicianId),
+                  if (actionWidget != null) ...[
+                    const SizedBox(height: 16),
+                    _sectionCard(
+                      title: 'Next Step',
+                      icon: Icons.task_alt_rounded,
+                      child: actionWidget,
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   _sectionCard(
-                    title: 'Next Step',
-                    icon: Icons.task_alt_rounded,
-                    child: actionWidget,
+                    title: 'Request Information',
+                    icon: Icons.assignment_outlined,
+                    child: Column(
+                      children: [
+                        if (address.trim().isNotEmpty)
+                          _detailRow(
+                            icon: Icons.location_on_outlined,
+                            title: 'Service Address',
+                            value: address,
+                          ),
+                        if (address.trim().isNotEmpty &&
+                            issueDescription.trim().isNotEmpty)
+                          const SizedBox(height: 18),
+                        if (issueDescription.trim().isNotEmpty)
+                          _detailRow(
+                            icon: Icons.notes_rounded,
+                            title: 'Problem Description',
+                            value: issueDescription,
+                          ),
+                        if ((address.trim().isNotEmpty ||
+                                issueDescription.trim().isNotEmpty) &&
+                            amount > 0)
+                          const SizedBox(height: 18),
+                        if (amount > 0)
+                          _detailRow(
+                            icon: Icons.payments_outlined,
+                            title: 'Current Amount',
+                            value: '${_formatAmount(amount)} Ks',
+                          ),
+                        if (address.trim().isEmpty &&
+                            issueDescription.trim().isEmpty &&
+                            amount <= 0)
+                          const Text(
+                            'No additional request information is available.',
+                            style: TextStyle(
+                              color: _muted,
+                              fontSize: 14,
+                              height: 1.6,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFDBEAFE)),
+                    ),
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.info_outline_rounded,
+                          color: _primary,
+                          size: 23,
+                        ),
+                        SizedBox(width: 11),
+                        Expanded(
+                          child: Text(
+                            'You can follow your request status here. Available actions will appear when your request reaches the appropriate stage.',
+                            style: TextStyle(
+                              color: Color(0xFF1E40AF),
+                              fontSize: 13,
+                              height: 1.6,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
-
-                const SizedBox(height: 16),
-
-                _sectionCard(
-                  title: 'Request Information',
-                  icon: Icons.assignment_outlined,
-                  child: Column(
-                    children: [
-                      if (address.trim().isNotEmpty)
-                        _detailRow(
-                          icon: Icons.location_on_outlined,
-                          title: 'Service Address',
-                          value: address,
-                        ),
-
-                      if (address.trim().isNotEmpty &&
-                          issueDescription.trim().isNotEmpty)
-                        const SizedBox(height: 18),
-
-                      if (issueDescription.trim().isNotEmpty)
-                        _detailRow(
-                          icon: Icons.notes_rounded,
-                          title: 'Problem Description',
-                          value: issueDescription,
-                        ),
-
-                      if ((address.trim().isNotEmpty ||
-                              issueDescription.trim().isNotEmpty) &&
-                          amount > 0)
-                        const SizedBox(height: 18),
-
-                      if (amount > 0)
-                        _detailRow(
-                          icon: Icons.payments_outlined,
-                          title: 'Current Amount',
-                          value: '${_formatAmount(amount)} Ks',
-                        ),
-
-                      if (address.trim().isEmpty &&
-                          issueDescription.trim().isEmpty &&
-                          amount <= 0)
-                        const Text(
-                          'No additional request information is available.',
-                          style: TextStyle(
-                            color: _muted,
-                            fontSize: 14,
-                            height: 1.6,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 18),
-
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFDBEAFE)),
-                  ),
-                  child: const Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.info_outline_rounded,
-                        color: _primary,
-                        size: 23,
-                      ),
-                      SizedBox(width: 11),
-                      Expanded(
-                        child: Text(
-                          'You can follow your request status here. Available actions will appear when your request reaches the appropriate stage.',
-                          style: TextStyle(
-                            color: Color(0xFF1E40AF),
-                            fontSize: 13,
-                            height: 1.6,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
           );
         },
@@ -910,11 +909,9 @@ class _ServiceRequestDetailScreenState
               ),
             ],
           ),
-
           const SizedBox(height: 20),
           const Divider(height: 1, color: Color(0xFFE8EDF5)),
           const SizedBox(height: 17),
-
           const Text(
             'REQUEST STATUS',
             style: TextStyle(
@@ -924,9 +921,7 @@ class _ServiceRequestDetailScreenState
               letterSpacing: 1,
             ),
           ),
-
           const SizedBox(height: 10),
-
           Row(
             children: [
               Expanded(
@@ -999,6 +994,445 @@ class _ServiceRequestDetailScreenState
                   ),
                 ),
                 child: Text(actionLabel),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// 💳 PROMOCODE ပါဝင်သော PAYMENT SCREEN (တိုက်ရိုက်ချိတ်ဆက်ထားသည့် မျက်နှာပြင်)
+// ============================================================================
+class DirectPromoPaymentScreen extends StatefulWidget {
+  final String requestId;
+  final String serviceName;
+  final double totalAmount;
+  final double materialCost;
+  final double serviceCost;
+  final double laborCost;
+
+  const DirectPromoPaymentScreen({
+    super.key,
+    required this.requestId,
+    required this.serviceName,
+    required this.totalAmount,
+    this.materialCost = 0.0,
+    this.serviceCost = 0.0,
+    this.laborCost = 0.0,
+  });
+
+  @override
+  State<DirectPromoPaymentScreen> createState() =>
+      _DirectPromoPaymentScreenState();
+}
+
+class _DirectPromoPaymentScreenState extends State<DirectPromoPaymentScreen> {
+  String? _selectedPromoCode;
+  double _discountPercentage = 0.0;
+  String _selectedPaymentMethod = 'Cash on Delivery';
+  bool _isProcessing = false;
+
+  late double _materialCost;
+  late double _serviceCost;
+  late double _laborCost;
+
+  @override
+  void initState() {
+    super.initState();
+    _materialCost = widget.materialCost;
+    _serviceCost = widget.serviceCost;
+    _laborCost = widget.laborCost;
+
+    // အကယ်၍ laborCost သီးသန့်မရှိပါက totalAmount ကို အခြေခံတန်ဖိုးအဖြစ် သတ်မှတ်မည်
+    if (_materialCost == 0 && _serviceCost == 0 && _laborCost == 0) {
+      _laborCost = widget.totalAmount;
+    }
+  }
+
+  double _parseCost(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString()) ?? 0.0;
+  }
+
+  double get _discountAmount {
+    if (_selectedPromoCode == null || _discountPercentage <= 0) {
+      return 0.0;
+    }
+    final double baseForDiscount =
+        _laborCost > 0 ? _laborCost : widget.totalAmount;
+    return (baseForDiscount * _discountPercentage) / 100;
+  }
+
+  double get _finalTotalAmount {
+    final double subtotal = (_materialCost + _serviceCost + _laborCost) > 0
+        ? (_materialCost + _serviceCost + _laborCost)
+        : widget.totalAmount;
+    final double total = subtotal - _discountAmount;
+    return total < 0 ? 0.0 : total;
+  }
+
+  Widget _buildPromoListSection() {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('promocodes').snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              'Promocode ရယူရာတွင် Error ရှိနေပါသည်: ${snapshot.error}',
+              style: const TextStyle(color: Colors.red),
+            ),
+          );
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+
+        if (docs.isEmpty) {
+          return _buildPromoCard(
+            code: 'LABOR10',
+            discount: 10.0,
+            description: 'လက်ခအတွက် ၁၀% အထူးလျှော့စျေး (Default)',
+          );
+        }
+
+        return Column(
+          children: docs.map((doc) {
+            final data = doc.data();
+            final String code =
+                (data['code'] ?? data['promoCode'] ?? doc.id).toString();
+            final double discount = _parseCost(data['discount']);
+            final String description =
+                (data['description'] ?? 'Special discount offer').toString();
+
+            return _buildPromoCard(
+              code: code,
+              discount: discount,
+              description: description,
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildPromoCard({
+    required String code,
+    required double discount,
+    required String description,
+  }) {
+    final bool isSelected = _selectedPromoCode == code;
+
+    return Card(
+      elevation: isSelected ? 2 : 0,
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isSelected ? const Color(0xFF0F4C5C) : Colors.grey.shade300,
+          width: isSelected ? 2 : 1,
+        ),
+      ),
+      child: ListTile(
+        leading: const CircleAvatar(
+          backgroundColor: Color(0xFF0F4C5C),
+          child: Icon(Icons.local_offer, color: Colors.white, size: 18),
+        ),
+        title: Text(
+          '$code (${discount.toStringAsFixed(0)}% OFF)',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF0F4C5C),
+          ),
+        ),
+        subtitle: Text(description),
+        trailing: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor:
+                isSelected ? Colors.red.shade600 : const Color(0xFF0F4C5C),
+            foregroundColor: Colors.white,
+          ),
+          onPressed: () {
+            setState(() {
+              if (isSelected) {
+                _selectedPromoCode = null;
+                _discountPercentage = 0.0;
+              } else {
+                _selectedPromoCode = code;
+                _discountPercentage = discount;
+              }
+            });
+          },
+          child: Text(isSelected ? 'ဖြုတ်မည်' : 'သုံးမည်'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _processPayment() async {
+    setState(() {
+      _isProcessing = true;
+    });
+
+    final user = FirebaseAuth.instance.currentUser;
+    final double amountToPay = _finalTotalAmount;
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('service_requests')
+          .doc(widget.requestId)
+          .update({
+        'status': 'completed',
+        'paymentStatus': 'paid',
+        'paidAmount': amountToPay,
+        'promoCode': _selectedPromoCode,
+        'discountAmount': _discountAmount,
+        'paymentMethod': _selectedPaymentMethod,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (_selectedPromoCode != null && user != null) {
+        await FirebaseFirestore.instance.collection('user_promos').add({
+          'userId': user.uid,
+          'requestId': widget.requestId,
+          'promoCode': _selectedPromoCode,
+          'usedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('ငွေပေးချေမှု အောင်မြင်ပါသည်'),
+          content: Text(
+            'စုစုပေါင်း ငွေပမာဏ ${amountToPay.toStringAsFixed(0)} ကျပ် ကို ($_selectedPaymentMethod) ဖြင့် ပေးချေပြီးပါပြီ။',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                Navigator.pop(context);
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Checkout & Payment'),
+        backgroundColor: const Color(0xFF0F4C5C),
+        foregroundColor: Colors.white,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 1️⃣ Promocode များ တိုက်ရိုက်ရွေးချယ်ရန်
+            const Text(
+              'ရယူနိုင်သော Promocode များ',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 10),
+            _buildPromoListSection(),
+            const SizedBox(height: 20),
+
+            // 2️⃣ ငွေပေးချေမည့် နည်းလမ်း
+            const Text(
+              'ငွေပေးချေမည့် နည်းလမ်း',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Column(
+                children: [
+                  RadioListTile<String>(
+                    title: const Text('Cash on Delivery (လက်ငင်းငွေချေမည်)'),
+                    value: 'Cash on Delivery',
+                    groupValue: _selectedPaymentMethod,
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _selectedPaymentMethod = value);
+                      }
+                    },
+                  ),
+                  const Divider(height: 1),
+                  RadioListTile<String>(
+                    title: const Text('KBZ Pay'),
+                    value: 'KBZ Pay',
+                    groupValue: _selectedPaymentMethod,
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _selectedPaymentMethod = value);
+                      }
+                    },
+                  ),
+                  const Divider(height: 1),
+                  RadioListTile<String>(
+                    title: const Text('Wave Pay'),
+                    value: 'Wave Pay',
+                    groupValue: _selectedPaymentMethod,
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _selectedPaymentMethod = value);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // 3️⃣ ငွေပေးချေရန် အသေးစိတ်
+            const Text(
+              'ငွေပေးချေရန် အသေးစိတ်',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('ဝန်ဆောင်မှုအမည်:'),
+                      Flexible(
+                        child: Text(
+                          widget.serviceName,
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('မူလကျသင့်ငွေ:'),
+                      Text('${widget.totalAmount.toStringAsFixed(0)} ကျပ်'),
+                    ],
+                  ),
+                  if (_selectedPromoCode != null &&
+                      _discountPercentage > 0) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Promocode လျှော့ငွေ ($_selectedPromoCode - ${_discountPercentage.toStringAsFixed(0)}%):',
+                        ),
+                        Text(
+                          '- ${_discountAmount.toStringAsFixed(0)} ကျပ်',
+                          style: const TextStyle(
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 10),
+                    child: Divider(),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'စုစုပေါင်း ပေးချေရမည့်ငွေ:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        '${_finalTotalAmount.toStringAsFixed(0)} ကျပ်',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: Color(0xFF0F4C5C),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // 4️⃣ Confirm Button
+            SizedBox(
+              height: 52,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0F4C5C),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: _isProcessing ? null : _processPayment,
+                child: _isProcessing
+                    ? const SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Text(
+                        'ငွေပေးချေမှုကို အတည်ပြုမည်',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
             ),
           ],

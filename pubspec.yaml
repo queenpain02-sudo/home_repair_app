@@ -42,7 +42,7 @@ flutter_launcher_icons:
   image_path: "assets/images/logo.jpg" # 👈 သင်အသုံးပြုမည့် Logo ပုံနေရာ
   android: true
   ios: true
-
+image_picker: ^1.0.7
 flutter:
   uses-material-design: true
 

@@ -102,7 +102,6 @@ class _PaymentVerificationScreenState extends State<PaymentVerificationScreen> {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // 🔔 Technician Notification (requestId, serviceRequestId နှစ်မျိုးလုံး ထည့်ထားသည်)
       if (technicianId.isNotEmpty) {
         final notificationRef = _firestore.collection('notifications').doc();
 
@@ -120,7 +119,6 @@ class _PaymentVerificationScreenState extends State<PaymentVerificationScreen> {
         });
       }
 
-      // 🔔 Customer Notification (requestId, serviceRequestId နှစ်မျိုးလုံး ထည့်ထားသည်)
       if (customerId.isNotEmpty) {
         final notificationRef = _firestore.collection('notifications').doc();
 
@@ -222,7 +220,6 @@ class _PaymentVerificationScreenState extends State<PaymentVerificationScreen> {
       }
 
       final requestData = requestSnapshot.data() ?? {};
-
       final customerId = requestData['customerId']?.toString() ?? '';
 
       final batch = _firestore.batch();
@@ -252,7 +249,6 @@ class _PaymentVerificationScreenState extends State<PaymentVerificationScreen> {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // 🔔 Customer Rejection Notification
       if (customerId.isNotEmpty) {
         final notificationRef = _firestore.collection('notifications').doc();
 
@@ -324,10 +320,8 @@ class _PaymentVerificationScreenState extends State<PaymentVerificationScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Payment Verification')),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _firestore
-            .collection('payments')
-            .where('status', isEqualTo: 'pending')
-            .snapshots(),
+        // 🛠️ status အားလုံးကို ဆွဲထုတ်ရန် where များကို ဖြုတ်ထားပါသည်
+        stream: _firestore.collection('payments').snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(child: Text('Error: ${snapshot.error}'));
@@ -350,7 +344,7 @@ class _PaymentVerificationScreenState extends State<PaymentVerificationScreen> {
                     color: Colors.green,
                   ),
                   SizedBox(height: 12),
-                  Text('No pending payments.', style: TextStyle(fontSize: 17)),
+                  Text('No payments found.', style: TextStyle(fontSize: 17)),
                 ],
               ),
             );
@@ -369,8 +363,20 @@ class _PaymentVerificationScreenState extends State<PaymentVerificationScreen> {
               final customerName = data['customerName']?.toString() ?? '';
               final method = data['paymentMethod']?.toString() ?? '';
               final transactionId = data['transactionId']?.toString() ?? '';
+              final status = data['status']?.toString().toLowerCase() ?? 'pending';
 
               final paymentAmount = _getPaymentAmount(data);
+
+              // Status အရောင်နှင့် စာသားသတ်မှတ်ခြင်း
+              Color statusColor = Colors.orange;
+              String statusText = 'Pending';
+              if (status == 'paid') {
+                statusColor = Colors.green;
+                statusText = 'Approved (Paid)';
+              } else if (status == 'rejected') {
+                statusColor = Colors.red;
+                statusText = 'Rejected';
+              }
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 14),
@@ -379,12 +385,38 @@ class _PaymentVerificationScreenState extends State<PaymentVerificationScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        serviceName,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              serviceName,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: statusColor),
+                            ),
+                            child: Text(
+                              statusText,
+                              style: TextStyle(
+                                color: statusColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 10),
                       _info('Customer', customerName),
@@ -393,35 +425,49 @@ class _PaymentVerificationScreenState extends State<PaymentVerificationScreen> {
                       _info('Transaction ID', transactionId),
                       _info('Request ID', requestId),
                       const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _isProcessing
-                                  ? null
-                                  : () => _rejectPayment(
-                                      paymentId: paymentId,
-                                      requestId: requestId,
-                                    ),
-                              icon: const Icon(Icons.close),
-                              label: const Text('Reject'),
+                      
+                      // 🛠️ Status က pending ဖြစ်မှသာ Approve / Reject လုပ်ခွင့်ပြုမည်
+                      if (status == 'pending')
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _isProcessing
+                                    ? null
+                                    : () => _rejectPayment(
+                                        paymentId: paymentId,
+                                        requestId: requestId,
+                                      ),
+                                icon: const Icon(Icons.close),
+                                label: const Text('Reject'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: _isProcessing
+                                    ? null
+                                    : () => _approvePayment(
+                                        paymentId: paymentId,
+                                        requestId: requestId,
+                                      ),
+                                icon: const Icon(Icons.check),
+                                label: const Text('Approve'),
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        Center(
+                          child: Text(
+                            'This payment has been $status.',
+                            style: TextStyle(
+                              color: statusColor,
+                              fontWeight: FontWeight.w500,
+                              fontStyle: FontStyle.italic,
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: _isProcessing
-                                  ? null
-                                  : () => _approvePayment(
-                                      paymentId: paymentId,
-                                      requestId: requestId,
-                                    ),
-                              icon: const Icon(Icons.check),
-                              label: const Text('Approve'),
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
                     ],
                   ),
                 ),

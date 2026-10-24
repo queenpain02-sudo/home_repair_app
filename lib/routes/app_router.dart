@@ -114,7 +114,17 @@ final GoRouter appRouter = GoRouter(
         return const CustomerHomeScreen();
       },
     ),
-
+// ============================================================
+    // CUSTOMER - INVOICE
+    // ============================================================
+    GoRoute(
+      path: '/customer/invoice',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? <String, dynamic>{};
+        final requestId = extra['requestId']?.toString() ?? '';
+        return InvoiceScreen(requestId: requestId);
+      },
+    ),
     // ============================================================
     // CUSTOMER - ADMIN SUPPORT CHAT
     // ============================================================

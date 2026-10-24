@@ -12,10 +12,6 @@ class AdminHomeScreen extends StatelessWidget {
   final Color darkColor = const Color(0xFF0F172A);
   final Color backgroundColor = const Color(0xFFF4F7FE);
 
-  // ============================================================
-  // LOGOUT
-  // ============================================================
-
   Future<void> _logout(BuildContext context) async {
     final shouldLogout = await showDialog<bool>(
       context: context,
@@ -67,10 +63,6 @@ class AdminHomeScreen extends StatelessWidget {
     }
   }
 
-  // ============================================================
-  // STAT STREAMS
-  // ============================================================
-
   Stream<int> _collectionCount(String collection) {
     return FirebaseFirestore.instance
         .collection(collection)
@@ -85,10 +77,6 @@ class AdminHomeScreen extends StatelessWidget {
         .snapshots()
         .map((snapshot) => snapshot.docs.length);
   }
-
-  // ============================================================
-  // WIDGETS
-  // ============================================================
 
   Widget _buildStatCard({
     required BuildContext context,
@@ -332,10 +320,6 @@ class AdminHomeScreen extends StatelessWidget {
     );
   }
 
-  // ============================================================
-  // BUILD
-  // ============================================================
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -354,7 +338,6 @@ class AdminHomeScreen extends StatelessWidget {
         ),
         centerTitle: false,
         actions: [
-          // Notification Icon
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: FirebaseFirestore.instance
                 .collection('notifications')
@@ -443,7 +426,6 @@ class AdminHomeScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          // Edit Profile Icon
           Container(
             margin: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
@@ -576,6 +558,25 @@ class AdminHomeScreen extends StatelessWidget {
                 subtitle: 'Manage your repair service business',
               ),
               const SizedBox(height: 12),
+              
+              // 🌟 Admin Earnings & Technician Breakdown Screen သို့ သွားမည့် Menu Card အသစ်
+              _buildMenuCard(
+                context: context,
+                icon: Icons.analytics_outlined,
+                iconColor: const Color(0xFF10B981),
+                title: 'Earnings & Technicians',
+                subtitle: 'View total earnings & tech breakdown',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AdminEarningsDashboard(),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 10),
+
               _buildMenuCard(
                 context: context,
                 icon: Icons.category_outlined,
@@ -656,64 +657,188 @@ class AdminHomeScreen extends StatelessWidget {
                 subtitle: 'Review and resolve customer complaints',
                 onTap: () => context.push('/admin/complaints'),
               ),
-              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// 📊 Admin Earnings & Technician Breakdown Dashboard Screen
+class AdminEarningsDashboard extends StatelessWidget {
+  const AdminEarningsDashboard({super.key});
+
+  final double adminCommissionPercent = 10.0; // Admin ရမည့် Labor Commission %
+
+  double _toDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0.0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Admin Earnings & Technicians'),
+        backgroundColor: const Color(0xFF0F4C5C),
+        foregroundColor: Colors.white,
+      ),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('service_requests')
+            .where('status', whereIn: ['completed', 'payment_paid'])
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+
+          final docs = snapshot.data?.docs ?? [];
+
+          if (docs.isEmpty) {
+            return const Center(child: Text('ပြီးစီးထားသော အလုပ်များ မရှိသေးပါ။'));
+          }
+
+          double grandTotalAdminEarnings = 0.0;
+          Map<String, Map<String, dynamic>> techDataMap = {};
+
+          for (var doc in docs) {
+            final data = doc.data();
+            final techId = data['technicianId']?.toString() ?? 'Unassigned';
+            final techName = data['technicianName']?.toString() ?? 'Unknown Tech';
+
+            double material = _toDouble(data['partsCost'] ?? data['materialCost']);
+            double service = _toDouble(data['serviceCost'] ?? data['serviceFee']);
+            double labor = _toDouble(data['laborCost'] ?? data['labor_cost'] ?? data['price']);
+
+            // 🧮 တွက်ချက်ခြင်း: Material + Service သည် Admin သို့ အပြည့်ရောက်မည်။ Labor ထဲမှ Commission % ကို Admin ယူမည်။
+            double adminCommissionFromLabor = (labor * adminCommissionPercent) / 100;
+            double jobAdminEarnings = material + service + adminCommissionFromLabor;
+            double techNetEarnings = labor - adminCommissionFromLabor;
+
+            grandTotalAdminEarnings += jobAdminEarnings;
+
+            if (!techDataMap.containsKey(techId)) {
+              techDataMap[techId] = {
+                'name': techName,
+                'totalJobs': 0,
+                'totalLabor': 0.0,
+                'techEarnings': 0.0,
+                'adminCutFromTech': 0.0,
+              };
+            }
+
+            techDataMap[techId]!['totalJobs'] += 1;
+            techDataMap[techId]!['totalLabor'] += labor;
+            techDataMap[techId]!['techEarnings'] += techNetEarnings;
+            techDataMap[techId]!['adminCutFromTech'] += adminCommissionFromLabor;
+          }
+
+          final techList = techDataMap.values.toList();
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
               Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: const Color(0xFFDBEAFE)),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0F4C5C), Color(0xFF3B82F6)],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                child: Row(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
+                    const Text(
+                      'Admin စုစုပေါင်း ဝင်ငွေ (Total Earnings)',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${grandTotalAdminEarnings.toStringAsFixed(0)} Ks',
+                      style: const TextStyle(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.info_outline_rounded,
-                        color: Color(0xFF2563EB),
-                        size: 20,
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Admin Control Center',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1E3A8A),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Manage services, technicians, customer '
-                            'requests, payments, reviews, advertisements '
-                            'and complaints from one place.',
-                            style: TextStyle(
-                              fontSize: 11,
-                              height: 1.4,
-                              color: Colors.blue.shade800,
-                            ),
-                          ),
-                        ],
-                      ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      '(Material + Service + Labor Commission % ပေါင်း)',
+                      style: TextStyle(color: Colors.white60, fontSize: 11),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(height: 24),
+              const Text(
+                'Technician တစ်ယောက်ချင်းစီ၏ ဝင်ငွေစာရင်း',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              ...techList.map((tech) {
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              tech['name'],
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0F4C5C),
+                              ),
+                            ),
+                            Chip(
+                              label: Text('${tech['totalJobs']} ပြီးစီး'),
+                              backgroundColor: Colors.blue.shade50,
+                            ),
+                          ],
+                        ),
+                        const Divider(),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Technician ရမည့် Net Earnings:'),
+                            Text(
+                              '${(tech['techEarnings'] as double).toStringAsFixed(0)} Ks',
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Admin သို့ ပေးရမည့် Commission (10%):'),
+                            Text(
+                              '${(tech['adminCutFromTech'] as double).toStringAsFixed(0)} Ks',
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
             ],
-          ),
-        ),
+          );
+        },
       ),
     );
   }

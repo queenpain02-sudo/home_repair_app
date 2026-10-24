@@ -24,6 +24,8 @@ class _TechnicianHomeScreenState extends State<TechnicianHomeScreen> {
   String _technicianId = '';
   String _technicianName = 'Technician';
   String _technicianEmail = '';
+  String _technicianIdNumber = ''; // 🌟 ID No. အတွက်
+  String _technicianProfileImage = ''; // 🌟 ဓာတ်ပုံ URL အတွက်
 
   bool _loadingTechnician = true;
   String _selectedCategory = 'All';
@@ -60,6 +62,8 @@ class _TechnicianHomeScreenState extends State<TechnicianHomeScreen> {
             data['displayName']?.toString() ??
             user.displayName ??
             'Technician';
+        _technicianIdNumber = data['idNumber']?.toString() ?? ''; // 🌟 ID No. ဖတ်ရန်
+        _technicianProfileImage = data['profileImage']?.toString() ?? data['profileImageUrl']?.toString() ?? data['imageUrl']?.toString() ?? ''; // 🌟 ဓာတ်ပုံဖတ်ရန်
 
         setState(() {
           _loadingTechnician = false;
@@ -82,6 +86,8 @@ class _TechnicianHomeScreenState extends State<TechnicianHomeScreen> {
               data['displayName']?.toString() ??
               user.displayName ??
               'Technician';
+          _technicianIdNumber = data['idNumber']?.toString() ?? '';
+          _technicianProfileImage = data['profileImage']?.toString() ?? data['profileImageUrl']?.toString() ?? data['imageUrl']?.toString() ?? '';
 
           setState(() {
             _loadingTechnician = false;
@@ -98,6 +104,8 @@ class _TechnicianHomeScreenState extends State<TechnicianHomeScreen> {
             data['displayName']?.toString() ??
             user.displayName ??
             'Technician';
+        _technicianIdNumber = data['idNumber']?.toString() ?? '';
+        _technicianProfileImage = data['profileImage']?.toString() ?? data['profileImageUrl']?.toString() ?? data['imageUrl']?.toString() ?? '';
       }
 
       setState(() {
@@ -497,8 +505,8 @@ class _TechnicianHomeScreenState extends State<TechnicianHomeScreen> {
         'quotationStatus': 'pending',
         'inspectionNote': quotation['inspectionNote'],
         'serviceCost': serviceCost,
-        'materialCost': partsCost, // Customer Screen တွင် ပြသရန် ထည့်သွင်းပေးခြင်း[cite: 7]
-        'laborCost': laborCost,     // Customer Screen တွင် ပြသရန် ထည့်သွင်းပေးခြင်း[cite: 7]
+        'materialCost': partsCost,
+        'laborCost': laborCost,
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
@@ -1200,24 +1208,56 @@ class _TechnicianHomeScreenState extends State<TechnicianHomeScreen> {
         backgroundColor: backgroundColor,
         elevation: 0,
         scrolledUnderElevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            Text(
-              _technicianName,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-                color: Color(0xFF0F172A),
-              ),
+            // 🌟 ဓာတ်ပုံ (Profile Avatar) ထည့်သွင်းပြသခြင်း
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: Colors.grey.shade300,
+              backgroundImage: _technicianProfileImage.isNotEmpty
+                  ? NetworkImage(_technicianProfileImage)
+                  : null,
+              child: _technicianProfileImage.isEmpty
+                  ? const Icon(Icons.person, color: Colors.grey)
+                  : null,
             ),
-            const Text(
-              'Technician Portal',
-              style: TextStyle(fontSize: 11, color: Colors.grey),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _technicianName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                  // 🌟 ID No. ကို Header တွင် ဖော်ပြပေးခြင်း
+                  Text(
+                    _technicianIdNumber.isNotEmpty ? 'ID: $_technicianIdNumber' : 'Technician Portal',
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
         actions: [
+          // 💰 My Earnings Button
+          IconButton(
+            icon: const Icon(Icons.account_balance_wallet_outlined, color: Color(0xFF0F172A)),
+            tooltip: 'My Earnings',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => TechnicianEarningsScreen(technicianId: _technicianId),
+                ),
+              );
+            },
+          ),
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: _firestore
                 .collection('notifications')
@@ -1382,6 +1422,118 @@ class _TechnicianHomeScreenState extends State<TechnicianHomeScreen> {
                         ),
                       ),
               ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+// 💰 Technician ၏ ကိုယ်ပိုင် ဝင်ငွေနှင့် အသားတင် (Net Earnings) ပြသသည့် Screen
+class TechnicianEarningsScreen extends StatelessWidget {
+  final String technicianId;
+  const TechnicianEarningsScreen({super.key, required this.technicianId});
+
+  final double adminCommissionPercent = 10.0; // Admin ယူမည့် Commission %
+
+  double _toDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0.0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('My Earnings & History'),
+        backgroundColor: const Color(0xFF0F4C5C),
+        foregroundColor: Colors.white,
+      ),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('service_requests')
+            .where('technicianId', isEqualTo: technicianId)
+            .where('status', whereIn: ['completed', 'payment_paid'])
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final docs = snapshot.data?.docs ?? [];
+
+          double myTotalNetEarnings = 0.0;
+
+          for (var doc in docs) {
+            final data = doc.data();
+            double labor = _toDouble(data['laborCost'] ?? data['labor_cost'] ?? data['price']);
+            
+            // Labor ထဲမှ Admin ယူမည့် ၁၀% ကော်မရှင်ကို နှုတ်ပြီးမှ Tech ရမည်
+            double commission = (labor * adminCommissionPercent) / 100;
+            double net = labor - commission;
+
+            myTotalNetEarnings += net;
+          }
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade700,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'ကျွန်ုပ်၏ စုစုပေါင်း အသားတင်ဝင်ငွေ (Net Earnings)',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${myTotalNetEarnings.toStringAsFixed(0)} Ks',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'စုစုပေါင်း ပြီးစီးခဲ့သော အလုပ်: ${docs.length} ခု',
+                      style: const TextStyle(color: Colors.white60, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'အလုပ်များ၏ အသေးစိတ်စာရင်း',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              ...docs.map((doc) {
+                final data = doc.data();
+                final serviceName = data['serviceName']?.toString() ?? 'Service';
+                double labor = _toDouble(data['laborCost'] ?? data['labor_cost'] ?? data['price']);
+                double commission = (labor * adminCommissionPercent) / 100;
+                double net = labor - commission;
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  child: ListTile(
+                    title: Text(serviceName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text('Labor: ${labor.toStringAsFixed(0)} Ks (Admin Fee: -${commission.toStringAsFixed(0)} Ks)'),
+                    trailing: Text(
+                      '${net.toStringAsFixed(0)} Ks',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 15),
+                    ),
+                  ),
+                );
+              }),
             ],
           );
         },

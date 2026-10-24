@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 class AdvertisementManagementScreen extends StatefulWidget {
   const AdvertisementManagementScreen({super.key});
@@ -48,9 +50,8 @@ class _AdvertisementManagementScreenState
       text: data?['description']?.toString() ?? '',
     );
 
-    final imageUrlController = TextEditingController(
-      text: data?['imageUrl']?.toString() ?? '',
-    );
+    String imageUrl = data?['imageUrl']?.toString() ?? '';
+    File? selectedImageFile; // 🌟 ဖုန်းထဲမှ ရွေးချယ်ထားသော ပုံဖိုင်
 
     final buttonTextController = TextEditingController(
       text: data?['buttonText']?.toString() ?? 'Book Now',
@@ -91,6 +92,22 @@ class _AdvertisementManagementScreenState
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            // 🖼️ Gallery မှ ပုံရွေးချယ်ရန် Function
+            Future<void> pickImage() async {
+              final picker = ImagePicker();
+              final pickedFile = await picker.pickImage(
+                source: ImageSource.gallery,
+                imageQuality: 70,
+              );
+
+              if (pickedFile != null) {
+                setDialogState(() {
+                  selectedImageFile = File(pickedFile.path);
+                  imageUrl = pickedFile.path;
+                });
+              }
+            }
+
             return AlertDialog(
               backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
@@ -146,17 +163,58 @@ class _AdvertisementManagementScreenState
                       const SizedBox(height: 14),
 
                       // ==================================================
-                      // IMAGE URL
+                      // IMAGE PICKER UI (URL အစား ဖုန်းမှ တိုက်ရိုက်ရွေးရန်)
                       // ==================================================
-                      TextField(
-                        controller: imageUrlController,
-                        decoration: InputDecoration(
-                          labelText: 'Image URL',
-                          hintText: 'https://...',
-                          prefixIcon: const Icon(Icons.image_outlined),
-                          border: OutlineInputBorder(
+                      GestureDetector(
+                        onTap: pickImage,
+                        child: Container(
+                          width: double.infinity,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
                             borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: Colors.grey.shade300),
                           ),
+                          child: selectedImageFile != null
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: Image.file(
+                                    selectedImageFile!,
+                                    fit: BoxFit.cover,
+                                  ),
+                                )
+                              : (imageUrl.isNotEmpty
+                                  ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(14),
+                                      child: imageUrl.startsWith('http')
+                                          ? Image.network(
+                                              imageUrl,
+                                              fit: BoxFit.cover,
+                                            )
+                                          : Image.file(
+                                              File(imageUrl),
+                                              fit: BoxFit.cover,
+                                            ),
+                                    )
+                                  : Column(
+                                      mainAxisAlignment:
+                                      MainAxisAlignment.center,
+                                      children: const [
+                                        Icon(
+                                          Icons.add_a_photo_outlined,
+                                          size: 32,
+                                          color: Colors.grey,
+                                        ),
+                                        SizedBox(height: 6),
+                                        Text(
+                                          'Tap to pick advertisement image',
+                                          style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    )),
                         ),
                       ),
 
@@ -362,7 +420,7 @@ class _AdvertisementManagementScreenState
                         'advertisementId': advertisementId,
                         'title': title,
                         'description': descriptionController.text.trim(),
-                        'imageUrl': imageUrlController.text.trim(),
+                        'imageUrl': imageUrl,
                         'buttonText': buttonTextController.text.trim().isEmpty
                             ? 'Book Now'
                             : buttonTextController.text.trim(),
@@ -437,7 +495,6 @@ class _AdvertisementManagementScreenState
 
     titleController.dispose();
     descriptionController.dispose();
-    imageUrlController.dispose();
     buttonTextController.dispose();
     serviceIdController.dispose();
     categoryIdController.dispose();
@@ -660,17 +717,29 @@ class _AdvertisementManagementScreenState
                             size: 36,
                             color: Colors.grey,
                           )
-                        : Image.network(
-                            imageUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const Icon(
-                                Icons.broken_image_outlined,
-                                size: 36,
-                                color: Colors.grey,
-                              );
-                            },
-                          ),
+                        : (imageUrl.startsWith('http')
+                            ? Image.network(
+                                imageUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return const Icon(
+                                    Icons.broken_image_outlined,
+                                    size: 36,
+                                    color: Colors.grey,
+                                  );
+                                },
+                              )
+                            : Image.file(
+                                File(imageUrl),
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return const Icon(
+                                    Icons.broken_image_outlined,
+                                    size: 36,
+                                    color: Colors.grey,
+                                  );
+                                },
+                              )),
                   ),
                 ),
 

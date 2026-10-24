@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final String collectionName; // 'users' သို့မဟုတ် 'technicians'
@@ -24,6 +26,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _nameController;
   late TextEditingController _phoneController;
   late TextEditingController _specializationController;
+  late TextEditingController _idNumberController;
+
+  File? _selectedImageFile; // 🌟 ဖုန်းထဲမှ ရွေးချယ်ထားသော ပုံဖိုင်
+  String _existingImageUrl = ''; // 🌟 Database ထဲတွင် ရှိပြီးသား ပုံလင့်ခ์ (သို့မဟုတ် Base64)
 
   bool _isLoading = true;
   bool _isSaving = false;
@@ -34,6 +40,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _nameController = TextEditingController();
     _phoneController = TextEditingController();
     _specializationController = TextEditingController();
+    _idNumberController = TextEditingController();
     _loadProfileData();
   }
 
@@ -60,6 +67,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         _phoneController.text = data['phone']?.toString() ?? '';
         _specializationController.text =
             data['specialization']?.toString() ?? '';
+        _idNumberController.text = data['idNumber']?.toString() ?? '';
+        _existingImageUrl =
+            data['profileImage']?.toString() ??
+            data['profileImageUrl']?.toString() ??
+            data['imageUrl']?.toString() ??
+            '';
       } else {
         _nameController.text = user.displayName ?? '';
       }
@@ -74,6 +87,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
+  // 🖼️ Gallery မှ ပုံရွေးချယ်ရန် Function
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70,
+    );
+
+    if (pickedFile != null) {
+      setState(() {
+        _selectedImageFile = File(pickedFile.path);
+      });
+    }
+  }
+
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -82,24 +110,33 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (user == null) return;
 
     try {
+      String imagePathToSave = _existingImageUrl;
+
+      // အကယ်၍ ပုံအသစ်ရွေးထားပါက Local path သို့မဟုတ် Cloud Storage သို့ တင်ရန် (လောလောဆယ် path သို့မဟုတ် URL အဖြစ် သိမ်းမည်)
+      if (_selectedImageFile != null) {
+        // မှတ်ချက်: Firebase Storage အသုံးမပြုသေးပါက File path (သို့မဟုတ် base64) ကို သိမ်းနိုင်သည်
+        imagePathToSave = _selectedImageFile!.path; 
+      }
+
       final updatedData = <String, dynamic>{
         'name': _nameController.text.trim(),
         'displayName': _nameController.text.trim(),
         'phone': _phoneController.text.trim(),
+        'idNumber': _idNumberController.text.trim(),
+        'profileImage': imagePathToSave,
+        'profileImageUrl': imagePathToSave,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      if (widget.userRole == 'technician') {
+      if (widget.userRole.toLowerCase() == 'technician') {
         updatedData['specialization'] = _specializationController.text.trim();
       }
 
-      // Firestore Update
       await _firestore
           .collection(widget.collectionName)
           .doc(user.uid)
           .set(updatedData, SetOptions(merge: true));
 
-      // Firebase Auth Profile Update
       await user.updateDisplayName(_nameController.text.trim());
 
       if (!mounted) return;
@@ -122,6 +159,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _nameController.dispose();
     _phoneController.dispose();
     _specializationController.dispose();
+    _idNumberController.dispose();
     super.dispose();
   }
 
@@ -154,13 +192,46 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 key: _formKey,
                 child: Column(
                   children: [
-                    CircleAvatar(
-                      radius: 45,
-                      backgroundColor: Colors.blue.shade100,
-                      child: Icon(
-                        _getRoleIcon(),
-                        size: 50,
-                        color: Colors.blue.shade800,
+                    // 🌟 ဓာတ်ပုံကို နှိပ်၍ Gallery မှ ရွေးချယ်နိုင်သော Widget
+                    GestureDetector(
+                      onTap: _pickImage,
+                      child: Stack(
+                        children: [
+                          CircleAvatar(
+                            radius: 50,
+                            backgroundColor: Colors.blue.shade100,
+                            backgroundImage: _selectedImageFile != null
+                                ? FileImage(_selectedImageFile!)
+                                : (_existingImageUrl.isNotEmpty
+                                    ? NetworkImage(_existingImageUrl)
+                                        as ImageProvider
+                                    : null),
+                            child: (_selectedImageFile == null &&
+                                    _existingImageUrl.isEmpty)
+                                ? Icon(
+                                    _getRoleIcon(),
+                                    size: 50,
+                                    color: Colors.blue.shade800,
+                                  )
+                                : null,
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF2563EB),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.camera_alt,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -180,7 +251,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       ),
                       validator: (value) =>
                           value == null || value.trim().isEmpty
-                          ? 'Please enter your name'
+                          ? 'နာမည်ထည့်ရန် လိုအပ်ပါသည်။'
                           : null,
                     ),
                     const SizedBox(height: 16),
@@ -190,6 +261,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       decoration: const InputDecoration(
                         labelText: 'Phone Number',
                         prefixIcon: Icon(Icons.phone_outlined),
+                        border: OutlineInputBorder(),
+                        fillColor: Colors.white,
+                        filled: true,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _idNumberController,
+                      decoration: const InputDecoration(
+                        labelText: 'ID No. (မှတ်ပုံတင် / အလုပ်သမားအမှတ်)',
+                        prefixIcon: Icon(Icons.badge_outlined),
                         border: OutlineInputBorder(),
                         fillColor: Colors.white,
                         filled: true,
