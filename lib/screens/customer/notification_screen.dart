@@ -250,7 +250,32 @@ class _NotificationScreenState extends State<NotificationScreen> {
       ),
     );
   }
+  
+  // 🛠️ Repair ပြီးဆုံးကြောင်း အတည်ပြုပြီး 1 ပတ်အကြာ Reminder ရက်သတ်မှတ်ခြင်း
+Future<void> setRepairReminder(String requestId, String customerId, String serviceName) async {
+  try {
+    final firestore = FirebaseFirestore.instance;
+    
+    // ယခုအချိန်မှစ၍ ၇ ရက် (၁ ပတ်) အကြာကို တွက်ချက်ခြင်း
+    DateTime oneWeekLater = DateTime.now().add(const Duration(days: 7));
 
+    // notifications collection ထဲသို့ reminder အဖြစ် ကြိုတင်ထည့်သွင်းခြင်း (သို့မဟုတ် Cloud Function ဖြင့် ဖတ်ရန်)
+    await firestore.collection('notifications').add({
+      'userId': customerId,
+      'requestId': requestId,
+      'type': 'service_reminder',
+      'title': 'ဝန်ဆောင်မှု အခြေအနေ မေးမြန်းခြင်း',
+      'message': 'သင်ပြုပြင်ခဲ့သော "$serviceName" ဝန်ဆောင်မှုမှာ ၁ ပတ်ပြည့်ပြီဖြစ်ပါသည်။ ယခုအခါ အဆင်ပြေပါရဲ့လားခင်ဗျာ?',
+      'scheduledFor': Timestamp.fromDate(oneWeekLater), // ၁ ပတ်ပြည့်မည့်ရက်
+      'isRead': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    debugPrint('1 ပတ်ပြည့် Reminder အောင်မြင်စွာ သတ်မှတ်ပြီးပါပြီ။');
+  } catch (e) {
+    debugPrint('Reminder error: $e');
+  }
+}
   Widget _buildCategoryTile({
     required String category,
     required String title,

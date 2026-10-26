@@ -25,7 +25,6 @@ class PaymentScreen extends StatefulWidget {
 }
 
 class _PaymentScreenState extends State<PaymentScreen> {
-  // 🌟 Form ကို Validation စစ်ဆေးရန် Key ထည့်သွင်းခြင်း
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _transactionController = TextEditingController();
 
@@ -67,7 +66,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return double.tryParse(value.toString()) ?? 0.0;
   }
 
-  // 🔍 Firestore မှ Service Request အချက်အလက်နှင့် ကုန်ကျစရိတ်များကို ဆွဲထုတ်ခြင်း
   Future<void> _fetchDetailsFromFirestore() async {
     final String? reqId = widget.requestId;
     if (reqId == null || reqId.isEmpty) {
@@ -134,7 +132,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return total < 0 ? 0.0 : total;
   }
 
-  // 🏷️ Promocode များကို Firestore မှ တိုက်ရိုက်ဆွဲထုတ်ပြသခြင်း
   Widget _buildPromoListSection() {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance.collection('promocodes').snapshots(),
@@ -262,9 +259,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  // 💳 ငွေပေးချေမှုကို အတည်ပြုပြီး Admin ၏ payments collection သို့ ပို့ဆောင်ခြင်း
   Future<void> _processPayment() async {
-    // 🌟 Form Validation စစ်ဆေးခြင်း (Online ငွေပေးချေမှုဖြစ်ပါက Transaction No. ပါဝင်ရမည်)
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -283,7 +278,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
       final firestore = FirebaseFirestore.instance;
       final batch = firestore.batch();
 
-      // 1. payments collection ထဲသို့ Admin ဘက်တွင် ပေါ်လာစေရန် document အသစ်ထည့်ခြင်း
       final paymentRef = firestore.collection('payments').doc();
       batch.set(paymentRef, {
         'paymentId': paymentRef.id,
@@ -295,26 +289,24 @@ class _PaymentScreenState extends State<PaymentScreen> {
         'originalAmount': (_materialCost + _serviceCost + _laborCost) > 0 ? (_materialCost + _serviceCost + _laborCost) : _baseTotalAmount,
         'discountAmount': _discountAmount,
         'paymentMethod': _selectedPaymentMethod,
-        'transactionId': transactionId, // 🌟 Transaction No. ထည့်သွင်းခြင်း
+        'transactionId': transactionId,
         'promoCode': _selectedPromoCode,
         'status': 'pending', 
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // 2. service_request ၏ payment status ကို update လုပ်ခြင်း
       if (widget.requestId != null && widget.requestId!.isNotEmpty) {
         final requestRef = firestore.collection('service_requests').doc(widget.requestId);
         batch.update(requestRef, {
           'paymentStatus': 'pending',
           'paymentMethod': _selectedPaymentMethod,
-          'transactionId': transactionId, // 🌟 Request ထဲတွင်လည်း တွဲသိမ်းရန်
+          'transactionId': transactionId,
           'promoCode': _selectedPromoCode,
           'discountAmount': _discountAmount,
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }
 
-      // 3. User promo အသုံးပြုမှုကို မှတ်တမ်းတင်ခြင်း
       if (_selectedPromoCode != null && user != null) {
         final promoRef = firestore.collection('user_promos').doc();
         batch.set(promoRef, {
@@ -374,11 +366,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
           : SingleChildScrollView(
               padding: const EdgeInsets.all(20.0),
               child: Form(
-                key: _formKey, // 🌟 Form Key ချိတ်ဆက်ခြင်း
+                key: _formKey,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // 1️⃣ Promocode များ ရွေးချယ်ရန်
                     const Text(
                       'ရယူနိုင်သော Promocode များ',
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
@@ -387,7 +378,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     _buildPromoListSection(),
                     const SizedBox(height: 20),
 
-                    // 2️⃣ ငွေပေးချေမည့် နည်းလမ်း
                     const Text(
                       'ငွေပေးချေမည့် နည်းလမ်း',
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
@@ -436,10 +426,40 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
 
-                    // 🌟 3️⃣ KPay သို့မဟုတ် Wave Pay ရွေးထားမှသာ Transaction No. ထည့်ရန် TextField ပေါ်လာမည်
+                    // 🌟 KBZ Pay သို့မဟုတ် Wave Pay ရွေးထားမှသာ ငွေလွှဲရမည့်အကောင့်အချက်အလက်နှင့် Transaction No. ပေါ်မည်
                     if (_selectedPaymentMethod != 'Cash on Delivery') ...[
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '📌 $_selectedPaymentMethod ဖြင့် ငွေလွှဲရန် အချက်အလက်',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0F4C5C),
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text('• Account No: 09974514299'),
+                            const Text('• Account Name: Aye Nandar Kyaw'),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'အထက်ပါအကောင့်သို့ ငွေလွှဲပြီးပါက အောက်ပါကွက်လပ်တွင် Transaction No. ကို ထည့်သွင်းပေးပါ။',
+                              style: TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
                       Text(
                         '$_selectedPaymentMethod Transaction No. ထည့်ရန်',
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
@@ -450,7 +470,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         keyboardType: TextInputType.text,
                         decoration: InputDecoration(
                           labelText: 'Transaction Number (ဥပမာ- ၂၁ သို့ ၂၂ လုံး)',
-                          hintText: 'လွှဲပြော့ထားသော Transaction No. ကို ထည့်ပါ',
+                          hintText: 'လွှဲပြောင်းထားသော Transaction No. ကို ထည့်ပါ',
                           prefixIcon: const Icon(Icons.receipt_long),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -463,7 +483,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                             if (value == null || value.trim().isEmpty) {
                               return 'ကျေးဇူးပြု၍ Transaction No. ထည့်ပါ။';
                             }
-                            // လိုအပ်ပါက အက္ခရာ အရေအတွက် သတ်မှတ်ချက်ကို ဤနေရာတွင် စစ်ဆေးနိုင်ပါသည်
                             if (value.trim().length < 15) {
                               return 'Transaction No. အချက်အလက် မမှန်ကန်ပါ။';
                             }
@@ -474,7 +493,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       const SizedBox(height: 20),
                     ],
 
-                    // 4️⃣ ငွေပေးချေရန် အသေးစိတ်
                     const Text(
                       'ငွေပေးချေရန် အသေးစိတ်',
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
@@ -588,7 +606,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     ),
                     const SizedBox(height: 32),
 
-                    // 5️⃣ Confirm Button
                     SizedBox(
                       height: 52,
                       child: ElevatedButton(

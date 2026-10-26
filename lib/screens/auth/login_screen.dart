@@ -31,7 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   // ==========================================
-  // Login
+  // Login (Email & Password)
   // ==========================================
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) {
@@ -45,9 +45,6 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      // --------------------------------------
-      // 1. Firebase Authentication Login
-      // --------------------------------------
       final credential = await _authService.login(
         email: _emailController.text.trim(),
         password: _passwordController.text,
@@ -59,9 +56,21 @@ class _LoginScreenState extends State<LoginScreen> {
         throw Exception('Login failed. User was not found.');
       }
 
-      // --------------------------------------
-      // 2. Get user profile from Firestore
-      // --------------------------------------
+      if (!user.emailVerified) {
+        await FirebaseAuth.instance.signOut();
+
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please verify your email address before logging in. Check your inbox.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
+
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -69,9 +78,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      // --------------------------------------
-      // 3. Check profile exists
-      // --------------------------------------
       if (!userDoc.exists) {
         await FirebaseAuth.instance.signOut();
 
@@ -87,101 +93,62 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // --------------------------------------
-      // 4. Get role
-      // --------------------------------------
       final data = userDoc.data();
-
       final role = data?['role']?.toString().trim().toLowerCase() ?? '';
 
-      debugPrint('LOGIN USER UID: ${user.uid}');
-      debugPrint('LOGIN USER EMAIL: ${user.email}');
-      debugPrint('LOGIN USER ROLE: $role');
-
-      // --------------------------------------
-      // 5. Navigate according to role
-      // --------------------------------------
       switch (role) {
         case 'admin':
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Admin login successful!'),
-              backgroundColor: Colors.green,
-            ),
+            const SnackBar(content: Text('Admin login successful!'), backgroundColor: Colors.green),
           );
-
           context.go('/admin');
           break;
 
         case 'technician':
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Technician login successful!'),
-              backgroundColor: Colors.green,
-            ),
+            const SnackBar(content: Text('Technician login successful!'), backgroundColor: Colors.green),
           );
-
           context.go('/technician');
           break;
 
         case 'customer':
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Login successful!'),
-              backgroundColor: Colors.green,
-            ),
+            const SnackBar(content: Text('Login successful!'), backgroundColor: Colors.green),
           );
-
           context.go('/customer');
           break;
 
         default:
-          // Unknown role
           await FirebaseAuth.instance.signOut();
-
           if (!mounted) return;
-
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Invalid account role: "$role"'),
-              backgroundColor: Colors.red,
-            ),
+            SnackBar(content: Text('Invalid account role: "$role"'), backgroundColor: Colors.red),
           );
       }
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
 
       String message;
-
       switch (e.code) {
         case 'invalid-credential':
-          message = 'Email or password is incorrect.';
-          break;
-
-        case 'invalid-email':
-          message = 'Please enter a valid email address.';
-          break;
-
-        case 'user-disabled':
-          message = 'This account has been disabled.';
-          break;
-
-        case 'user-not-found':
-          message = 'No account found with this email.';
-          break;
-
         case 'wrong-password':
           message = 'Email or password is incorrect.';
           break;
-
+        case 'invalid-email':
+          message = 'Please enter a valid email address.';
+          break;
+        case 'user-disabled':
+          message = 'This account has been disabled.';
+          break;
+        case 'user-not-found':
+          message = 'No account found with this email.';
+          break;
         case 'too-many-requests':
           message = 'Too many login attempts. Please try again later.';
           break;
-
         case 'network-request-failed':
           message = 'Network error. Please check your internet connection.';
           break;
-
         default:
           message = e.message ?? 'Login failed.';
       }
@@ -191,12 +158,68 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Login failed: $e'),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text('Login failed: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  // ==========================================
+  // Google Sign-In Handler 🌟
+  // ==========================================
+  Future<void> _handleGoogleLogin() async {
+    setState(() {
+      _loading = true;
+    });
+
+    try {
+      final credential = await _authService.signInWithGoogle();
+      
+      if (credential == null) {
+        setState(() => _loading = false);
+        return; // User ပယ်ဖျက်လိုက်လျှင်
+      }
+
+      final user = credential.user;
+      if (user == null) throw Exception('Google sign in failed.');
+
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (!mounted) return;
+
+      if (!userDoc.exists) {
+        await FirebaseAuth.instance.signOut();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('User profile not found.'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+
+      final data = userDoc.data();
+      final role = data?['role']?.toString().trim().toLowerCase() ?? 'customer';
+
+      if (!mounted) return;
+
+      if (role == 'admin') {
+        context.go('/admin');
+      } else if (role == 'technician') {
+        context.go('/technician');
+      } else {
+        context.go('/customer');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Google Login Error: $e'), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) {
@@ -244,20 +267,16 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       String message;
-
       switch (e.code) {
         case 'user-not-found':
           message = 'No account found with this email.';
           break;
-
         case 'invalid-email':
           message = 'Please enter a valid email address.';
           break;
-
         case 'network-request-failed':
           message = 'Network error. Please check your internet connection.';
           break;
-
         default:
           message = e.message ?? 'Could not send password reset email.';
       }
@@ -267,12 +286,8 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Password reset failed: $e'),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text('Password reset failed: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -292,7 +307,6 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // 🖼️ Real Logo (Asset Image) ထည့်သွင်းထားခြင်း
                   Center(
                     child: Container(
                       width: 90,
@@ -311,10 +325,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(45),
                         child: Image.asset(
-                          'assets/images/logo.jpg', // 👈 သင့်ရဲ့ logo ပုံနေရာ
+                          'assets/images/logo.jpg',
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) {
-                            // ပုံရှာမတွေ့ပါက သို့မဟုတ် Error တက်ပါက အရန်ပေါ်မည့် Icon
                             return const Icon(
                               Icons.home_repair_service,
                               size: 45,
@@ -435,6 +448,25 @@ class _LoginScreenState extends State<LoginScreen> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // 🌟 Google Sign-In Button အသစ်ထည့်သွင်းခြင်း
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(52),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      side: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    onPressed: _loading ? null : _handleGoogleLogin,
+                    icon: const Icon(Icons.g_mobiledata, size: 30, color: Colors.red),
+                    label: const Text(
+                      'Sign in with Google',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
                     ),
                   ),
 

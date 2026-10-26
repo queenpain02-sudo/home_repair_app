@@ -386,6 +386,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       },
     );
   }
+  
 
   Widget _placeholderImage() {
     return Container(

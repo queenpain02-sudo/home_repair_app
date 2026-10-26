@@ -57,6 +57,8 @@ import 'package:home_repair_app/screens/admin/review_management_screen.dart';
 import 'package:home_repair_app/screens/admin/advertisement_management_screen.dart';
 import 'package:home_repair_app/screens/admin/admin_chat_inbox_screen.dart';
 import 'package:home_repair_app/screens/admin/admin_chat_screen.dart';
+import 'package:home_repair_app/screens/admin/complaint_management_screen.dart';
+
 
 // ============================================================
 // TECHNICIAN
@@ -381,7 +383,12 @@ final GoRouter appRouter = GoRouter(
         return const ServiceCategoryManagementScreen();
       },
     ),
-
+        GoRoute(
+      path: '/admin/compliantmanagement',
+      builder: (context, state) {
+        return const ComplaintManagementScreen();
+      },
+    ),
     // ============================================================
     // ADMIN - SERVICE REQUEST MANAGEMENT
     // ============================================================

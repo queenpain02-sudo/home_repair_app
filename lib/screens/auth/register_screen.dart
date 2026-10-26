@@ -48,6 +48,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
+      // ၁။ အကောင့်အသစ် ဖန်တီးခြင်း[cite: 5]
       await _authService.register(
         name: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
@@ -55,17 +56,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
         password: _passwordController.text,
       );
 
+      // ၂။ Verification Email ပို့ခြင်း[cite: 5]
+      User? user = FirebaseAuth.instance.currentUser;
+      if (user != null && !user.emailVerified) {
+        await user.sendEmailVerification();
+      }
+
+      // 🌟 ၃။ အီးမေးလ် Verify လုပ်ပြီးမှ ဝင်ခွင့်ပြုရန် Register ပြီးချင်း Logout လုပ်ထားခြင်း
+      await FirebaseAuth.instance.signOut();
+
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Registration successful!'),
+          content: Text('Registration successful! Please check your email to verify your account before logging in.'),
           backgroundColor: Colors.green,
         ),
       );
 
-      // Firebase register ပြီးတာနဲ့ user က login ဝင်ထားပြီးသား ဖြစ်ပါတယ်။
-      context.go('/customer');
+      // Login မျက်နှာပြင်သို့ ပြန်ပို့ခြင်း
+      context.go('/login');
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
 
@@ -134,24 +144,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 20),
-
                 const Icon(Icons.home_repair_service, size: 70),
-
                 const SizedBox(height: 20),
-
                 const Text(
                   'Create Account',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                 ),
-
                 const SizedBox(height: 8),
-
                 const Text(
                   'Register for Phaung Home Repair',
                   textAlign: TextAlign.center,
                 ),
-
                 const SizedBox(height: 32),
 
                 // Full Name
@@ -167,11 +171,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     if (value == null || value.trim().isEmpty) {
                       return 'Please enter your name';
                     }
-
                     if (value.trim().length < 2) {
                       return 'Name is too short';
                     }
-
                     return null;
                   },
                 ),
@@ -192,11 +194,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     if (value == null || value.trim().isEmpty) {
                       return 'Please enter your phone number';
                     }
-
                     if (value.trim().length < 7) {
                       return 'Please enter a valid phone number';
                     }
-
                     return null;
                   },
                 ),
@@ -217,13 +217,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     if (value == null || value.trim().isEmpty) {
                       return 'Please enter your email';
                     }
-
                     final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-
                     if (!emailRegex.hasMatch(value.trim())) {
                       return 'Please enter a valid email';
                     }
-
                     return null;
                   },
                 ),
@@ -256,11 +253,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     if (value == null || value.isEmpty) {
                       return 'Please enter a password';
                     }
-
                     if (value.length < 6) {
                       return 'Password must be at least 6 characters';
                     }
-
                     return null;
                   },
                 ),
@@ -293,11 +288,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     if (value == null || value.isEmpty) {
                       return 'Please confirm your password';
                     }
-
                     if (value != _passwordController.text) {
                       return 'Passwords do not match';
                     }
-
                     return null;
                   },
                   onFieldSubmitted: (_) {
@@ -347,7 +340,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 20),
               ],
             ),

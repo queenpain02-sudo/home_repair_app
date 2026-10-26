@@ -503,7 +503,7 @@ class _ServiceCategoryManagementScreenState
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     Text(
                       'Tap "Add Category" to create your first service category.',
                       textAlign: TextAlign.center,

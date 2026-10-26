@@ -28,7 +28,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     super.initState();
     _loadProfile();
   }
-
+  
   Future<void> _loadProfile() async {
     final user = _auth.currentUser;
 
@@ -129,7 +129,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       _getString('city'),
     ].where((value) => value.isNotEmpty).join(', ');
   }
-
+  
   Future<void> _logout() async {
     final shouldLogout = await showDialog<bool>(
       context: context,
